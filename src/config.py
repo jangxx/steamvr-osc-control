@@ -36,6 +36,9 @@ class Config:
 			"command_mapping": {}
 		}
 
+		self.reload()
+
+	def reload(self):
 		if os.path.exists(self._config_path):
 			with open(self._config_path, "r") as configfile:
 				file_config = json.load(configfile)

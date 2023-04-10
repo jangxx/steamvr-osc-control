@@ -95,7 +95,7 @@ class WebSocketInterface:
 			self._on_message(message)
 
 	async def run_forever(self):
-		async for websocket in websockets.connect("ws://localhost:27062/", compression=None, origin="http://localhost:27062"):
+		async for websocket in websockets.connect("ws://127.0.0.1:27062/", compression=None, origin="http://localhost:27062"):
 			self._ws = websocket
 
 			await self._connect()
@@ -103,6 +103,7 @@ class WebSocketInterface:
 			try:
 				await self._run()
 			except websockets.ConnectionClosed:
+				print("closed")
 				continue
 			except:
 				traceback.print_exc()

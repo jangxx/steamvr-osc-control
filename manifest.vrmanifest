@@ -1,0 +1,18 @@
+{
+	"source": "builtin",
+	"applications": [
+		{
+			"app_key": "com.jangxx.steamvr-osc-control",
+			"launch_type": "binary",
+			"binary_path_windows": "steamvr_osc_control.exe",
+			"is_dashboard_overlay": true,
+
+			"strings": {
+				"en_us": {
+					"name": "SteamVR OSC Control",
+					"description": "Exposes SteamVR functions via OSC toggles"
+				}
+			}
+		}
+	]
+}

@@ -4,12 +4,14 @@ import signal
 import sys
 import os
 import threading
+import time
 import tkinter as tk
-from tkinter.filedialog import asksaveasfilename
+from tkinter.filedialog import asksaveasfilename, askopenfilename
 from tkinter import messagebox
 import subprocess
 import asyncio
 import traceback
+import configparser
 
 import pystray
 from PIL import Image
@@ -19,6 +21,8 @@ from pythonosc.dispatcher import Dispatcher
 
 from config import CONFIG_DIR, Config
 from websocket_interface import WebSocketInterface
+
+APPLICATION_KEY = "com.jangxx.steamvr-osc-control"
 
 parser = argparse.ArgumentParser(description="Controls SteamVR using OSC messages")
 parser.add_argument("--stdout", action="store_true", help="Log to stdout and stderr instead of redirecting all output to the log file", dest="use_stdout")
@@ -41,7 +45,7 @@ if getattr(sys, 'frozen', False):
 	IS_FROZEN = True
 else:
 	# The application is not frozen
-	SCRIPT_DIR = os.path.dirname(__file__)
+	SCRIPT_DIR = os.path.join(os.path.dirname(__file__), "../")
 	IS_FROZEN = False
 
 # this has to happen after we setup the stdout and stderr redirection
@@ -52,9 +56,16 @@ websocket_interface: WebSocketInterface = None
 osc_transport = None
 
 main_thread_exited = threading.Event()
+openvr_event_thread: threading.Thread = None
+exit_openvr_event_thread = threading.Event()
 
 global_state = {
-	"all_commands": []
+	"all_commands": [],
+	"reloading_config": False,
+	"openvr_initialized": False,
+}
+
+SPECIAL_COMMANDS = {
 }
 
 trayicon = None
@@ -68,6 +79,13 @@ def show_error(message, title="Error"):
 	messagebox.showerror(title, message)
 	root.destroy()
 
+def show_message(message, title="Info"):
+	root = tk.Tk()
+	root.withdraw()
+	messagebox.showinfo(title, message)
+	root.destroy()
+
+
 def exit_program():
 	if async_main_loop is not None:
 		asyncio.run_coroutine_threadsafe(exit_async(), async_main_loop)
@@ -77,8 +95,98 @@ def exit_program():
 
 	trayicon.stop()
 
+def reload_config():
+	global_state["reloading_config"] = True
+
+	global_config.reload()
+
+	if async_main_loop is not None:
+		asyncio.run_coroutine_threadsafe(exit_async(), async_main_loop)
+
+def install_manifest():
+	if not IS_FROZEN:
+		show_error("Manifest can only be installed when the application is built")
+		return
+
+	try:
+		openvr.VRApplications().addApplicationManifest(relpath("./manifest.vrmanifest"), False)
+
+		show_message("Successfully registered with SteamVR", "Success")
+	except Exception as e:
+		show_error(f"Failed to install manifest: {e}")
+		traceback.print_exc()
+
+def uninstall_manifest():
+	try:
+		manifest_working_dir = openvr.VRApplications().getApplicationPropertyString(APPLICATION_KEY, openvr.VRApplicationProperty_WorkingDirectory_String)
+		manifest_path = os.path.normpath(os.path.join(manifest_working_dir, "./manifest.vrmanifest"))
+
+		openvr.VRApplications().removeApplicationManifest(manifest_path)
+
+		show_message("Successfully unregistered from SteamVR", "Success")
+	except Exception as e:
+		show_error(f"Failed to uninstall manifest: {e}")
+		traceback.print_exc()
+
+def openvr_event_thread_fn():
+	event = openvr.VREvent_t()
+
+	while not exit_openvr_event_thread.is_set():
+		if openvr.VRSystem().pollNextEvent(event):
+			event_type = event.eventType
+
+			if event_type == openvr.VREvent_Quit:
+				exit_program()
+				break
+
+		time.sleep(0.1)
+
 def open_config_dir():
 	subprocess.Popen(f'explorer "{os.path.dirname(global_config._config_path)}"')
+
+def load_mapping_from_file():
+	root = tk.Tk()
+	root.withdraw()
+	filename = askopenfilename(
+		filetypes=[("Command mapping file", "*.txt")],
+		defaultextension=".txt",
+		title="Load command mapping from file",
+	)
+	root.destroy()
+
+	if filename == "":
+		return
+
+	try:
+		cp = configparser.RawConfigParser()
+		cp.optionxform = str # make option names case sensitive
+
+		cp.read(filename)
+
+		if not "mapping" in cp:
+			raise Exception("Command file does not contain a [mapping] section")
+
+		new_command_mapping = {}
+
+		for param_name, command in cp["mapping"].items():
+			if " " in param_name:
+				raise Exception(f"Parameter '{param_name}' contains spaces")
+			
+			new_command_mapping[f"/avatar/parameters/{param_name}"] = command
+
+		print(f"Loading new command mapping: {new_command_mapping}")
+
+		command_mapping = global_config.get(["command_mapping"])
+		if command_mapping is None:
+			command_mapping = {}
+
+		command_mapping.update(new_command_mapping)
+
+		global_config.set(["command_mapping"], command_mapping)
+
+	except Exception as e:
+		show_error(f"Failed to load command mapping from file: {e}")
+		traceback.print_exc()
 
 def write_all_commands_to_file():
 	root = tk.Tk()
@@ -102,22 +210,34 @@ def write_all_commands_to_file():
 		show_error(f"Failed to write commands to file: {repr(e)}")
 
 def generate_menu():
-	# yield pystray.MenuItem("Register with SteamVR", action=open_config_dir)
+	if global_state["openvr_initialized"]:
+		if openvr.VRApplications().isApplicationInstalled(APPLICATION_KEY):
+			yield pystray.MenuItem("Unregister from SteamVR", action=uninstall_manifest)
+		else:
+			yield pystray.MenuItem("Register with SteamVR", action=install_manifest)
+	
+	yield pystray.Menu.SEPARATOR
 	yield pystray.MenuItem("Open config directory", action=open_config_dir)
-	yield pystray.MenuItem("Write all commands to file", action=write_all_commands_to_file)
+	yield pystray.MenuItem("Reload config", action=reload_config)
+	yield pystray.MenuItem("Load command mapping from file", action=load_mapping_from_file)
+	# yield pystray.Menu.SEPARATOR
+	# yield pystray.MenuItem("Write all commands to file", action=write_all_commands_to_file)
+	yield pystray.Menu.SEPARATOR
 	yield pystray.MenuItem("Exit", action=exit_program)
 
 traymenu = pystray.Menu(generate_menu)
 
-trayimage_icon = Image.open(relpath("../assets/drink_tracker_icon_256.png"))
+trayimage_icon = Image.open(relpath("./assets/icon_32.png"))
+trayimage_icon_disabled = Image.open(relpath("./assets/icon_disabled_32.png"))
 
 trayicon = pystray.Icon("steamvr_osc_ctrl", title="SteamVR OSC Control", menu=traymenu)
-trayicon.icon = trayimage_icon
+trayicon.icon = trayimage_icon_disabled
 
+# decorator for async functions that prints any exceptions that occur
 def print_async_exceptions(f):
 	async def wrapper(*args, **kwargs):
 		try:
-			await f(*args, **kwargs)
+			return await f(*args, **kwargs)
 		except:
 			traceback.print_exc()
 	return wrapper
@@ -128,11 +248,16 @@ async def osc_message_handler(command_mailboxes: dict[str, str], address: str, *
 
 	if command_mapping is None:
 		return
+	
+	if len(osc_args) != 1 or osc_args[0] != True:
+		return
 
 	if address in command_mapping:
 		command = command_mapping[address]
 
-		if command in command_mailboxes:
+		if command in SPECIAL_COMMANDS:
+			await websocket_interface.send_request(**SPECIAL_COMMANDS[command])
+		elif command in command_mailboxes:
 			await websocket_interface.send_request(command_mailboxes[command], message_type=command)
 
 async def exit_async():
@@ -145,11 +270,15 @@ async def async_main():
 	global websocket_interface
 	global osc_transport
 
+	trayicon.icon = trayimage_icon_disabled
+
+	global_state["reloading_config"] = False
+
 	websocket_interface = WebSocketInterface()
-
 	ws_running = asyncio.create_task(websocket_interface.run_forever())
-
 	await websocket_interface.connected_event.wait()
+
+	print("Connected to SteamVR websocket")
 
 	all_commands = []
 
@@ -165,19 +294,20 @@ async def async_main():
 	print(f"Got {len(all_commands)} commands")
 
 	osc_dispatcher = Dispatcher()
-
 	osc_dispatcher.set_default_handler(lambda address, *osc_args: 
 				    asyncio.run_coroutine_threadsafe(osc_message_handler(command_mailboxes, address, *osc_args), asyncio.get_event_loop()))
 
-	osc_server = AsyncIOOSCUDPServer(
-		(global_config.get(["osc", "listen_address"]), global_config.get(["osc", "listen_port"])),
-		osc_dispatcher,
-		async_main_loop
-	)
-
+	address_tuple = (global_config.get(["osc", "listen_address"]), global_config.get(["osc", "listen_port"]))
+	osc_server = AsyncIOOSCUDPServer(address_tuple, osc_dispatcher, async_main_loop)
 	osc_transport, _ = await osc_server.create_serve_endpoint()
+	print(f"OSC server listening on {address_tuple}")
+
+	trayicon.icon = trayimage_icon
 
 	await ws_running
+
+	if global_state["reloading_config"]:
+		return await async_main()
 
 # main thread after pystray has spawned the tray icon
 def main(icon):
@@ -187,7 +317,7 @@ def main(icon):
 
 	encountered_error = False
 
-	# setup openvr and feeder
+	# connect to openvr
 	try:
 		global_config.save()
 
@@ -203,16 +333,36 @@ def main(icon):
 		trayicon.stop()
 		return
 
+	openvr_event_thread = threading.Thread(target=openvr_event_thread_fn, daemon=True)
+	openvr_event_thread.start()
+
+	global_state["openvr_initialized"] = True
+	trayicon.update_menu()
+	print("OpenVR initialized")
+
 	async_main_loop = asyncio.new_event_loop()
-	async_main_loop.run_until_complete(async_main())
+
+	# run async main in the same thread
+	try:
+		async_main_loop.run_until_complete(async_main())
+	except Exception as e:
+		show_error(f"Encountered unexpected error: {e}", "Error")
+		traceback.print_exc()
+		encountered_error = True
 
 	print("Async main loop exited")
 
+	exit_openvr_event_thread.set()
+
 	openvr.shutdown()
 
+	global_state["openvr_initialized"] = False
 	print("OpenVR shut down")
 
 	main_thread_exited.set()
+
+	if encountered_error:
+		trayicon.stop()
 
 if __name__ == '__main__':
 	signal.signal(signal.SIGINT, signal.SIG_DFL)
