@@ -5,7 +5,7 @@ from cx_Freeze import setup, Executable
 # Dependencies are automatically detected, but it might need fine tuning.
 build_exe_options = {
 	"packages": [ "pystray", "websockets" ],
-	"excludes": [ ],
+	"excludes": [ "tkinter" ],
 	"include_files": [
 		("./assets/icon_32.png", "assets/icon_32.png"),
 		("./assets/icon_disabled_32.png", "assets/icon_disabled_32.png"),

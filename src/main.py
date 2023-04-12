@@ -5,9 +5,6 @@ import sys
 import os
 import threading
 import time
-import tkinter as tk
-from tkinter.filedialog import asksaveasfilename, askopenfilename
-from tkinter import messagebox
 import subprocess
 import asyncio
 import traceback
@@ -18,6 +15,8 @@ from PIL import Image
 import openvr
 from pythonosc.osc_server import AsyncIOOSCUDPServer
 from pythonosc.dispatcher import Dispatcher
+import win32gui
+import win32con
 
 from config import CONFIG_DIR, Config
 from websocket_interface import WebSocketInterface
@@ -75,19 +74,13 @@ def relpath(p):
 
 def show_error(message, title="Error"):
 	def _show():
-		root = tk.Tk()
-		root.withdraw()
-		messagebox.showerror(title, message)
-		root.destroy()
+		win32gui.MessageBox(None, message, title, win32con.MB_ICONERROR)
 
 	threading.Thread(target=_show).start()
 
 def show_message(message, title="Info"):
 	def _show():
-		root = tk.Tk()
-		root.withdraw()
-		messagebox.showinfo(title, message)
-		root.destroy()
+		win32gui.MessageBox(None, message, title, win32con.MB_ICONINFORMATION)
 
 	threading.Thread(target=_show).start()
 
@@ -151,16 +144,14 @@ def open_config_dir():
 	subprocess.Popen(f'explorer "{os.path.dirname(global_config._config_path)}"')
 
 def load_mapping_from_file():
-	root = tk.Tk()
-	root.withdraw()
-	filename = askopenfilename(
-		filetypes=[("Command mapping file", "*.txt")],
-		defaultextension=".txt",
-		title="Load command mapping from file",
-	)
-	root.destroy()
-
-	if filename == "":
+	try:
+		filename, _, _ = win32gui.GetOpenFileNameW(
+			Filter="Command mapping file (*.txt)\0*.txt\0",
+			Title="Load command mapping from file",
+			DefExt=".txt",
+			Flags=win32con.OFN_NOCHANGEDIR
+		)
+	except:
 		return
 
 	try:
@@ -194,27 +185,6 @@ def load_mapping_from_file():
 	except Exception as e:
 		show_error(f"Failed to load command mapping from file: {e}")
 		traceback.print_exc()
-
-def write_all_commands_to_file():
-	root = tk.Tk()
-	root.withdraw()
-	filename = asksaveasfilename(
-		filetypes=[("Text file", "*.txt")],
-		defaultextension=".txt",
-		title="Write all commands to file",
-		initialfile="all_commands.txt",
-	)
-	root.destroy()
-
-	if filename == "":
-		return
-	
-	try:
-		with open(filename, "w") as f:
-			for command in global_state["all_commands"]:
-				f.write(command["command"] + "\n")
-	except Exception as e:
-		show_error(f"Failed to write commands to file: {repr(e)}")
 
 def generate_menu():
 	if global_state["openvr_initialized"]:
