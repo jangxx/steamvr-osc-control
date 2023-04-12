@@ -74,16 +74,22 @@ def relpath(p):
 	return os.path.normpath(os.path.join(SCRIPT_DIR, p))
 
 def show_error(message, title="Error"):
-	root = tk.Tk()
-	root.withdraw()
-	messagebox.showerror(title, message)
-	root.destroy()
+	def _show():
+		root = tk.Tk()
+		root.withdraw()
+		messagebox.showerror(title, message)
+		root.destroy()
+
+	threading.Thread(target=_show).start()
 
 def show_message(message, title="Info"):
-	root = tk.Tk()
-	root.withdraw()
-	messagebox.showinfo(title, message)
-	root.destroy()
+	def _show():
+		root = tk.Tk()
+		root.withdraw()
+		messagebox.showinfo(title, message)
+		root.destroy()
+
+	threading.Thread(target=_show).start()
 
 
 def exit_program():
@@ -184,6 +190,7 @@ def load_mapping_from_file():
 
 		global_config.set(["command_mapping"], command_mapping)
 
+		show_message(f"Successfully loaded {len(new_command_mapping)} commands from file", "Success")
 	except Exception as e:
 		show_error(f"Failed to load command mapping from file: {e}")
 		traceback.print_exc()
@@ -307,6 +314,7 @@ async def async_main():
 	await ws_running
 
 	if global_state["reloading_config"]:
+		show_message("Reloaded config")
 		return await async_main()
 
 # main thread after pystray has spawned the tray icon
