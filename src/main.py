@@ -197,8 +197,6 @@ def generate_menu():
 	yield pystray.MenuItem("Open config directory", action=open_config_dir)
 	yield pystray.MenuItem("Reload config", action=reload_config)
 	yield pystray.MenuItem("Load command mapping from file", action=load_mapping_from_file)
-	# yield pystray.Menu.SEPARATOR
-	# yield pystray.MenuItem("Write all commands to file", action=write_all_commands_to_file)
 	yield pystray.Menu.SEPARATOR
 	yield pystray.MenuItem("Exit", action=exit_program)
 
