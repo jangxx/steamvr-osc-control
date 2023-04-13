@@ -7,6 +7,7 @@ build_exe_options = {
 	"packages": [ "pystray", "websockets" ],
 	"excludes": [ "tkinter" ],
 	"include_files": [
+		("./assets/icon.ico", "assets/icon.ico"),
 		("./assets/icon_32.png", "assets/icon_32.png"),
 		("./assets/icon_disabled_32.png", "assets/icon_disabled_32.png"),
 		("./manifest.vrmanifest", "manifest.vrmanifest"),

@@ -33,6 +33,10 @@ class Config:
 				"listen_address": "127.0.0.1",
 				"listen_port": 9001,
 			},
+			"screenshots": {
+				"save_path": "SteamVR",
+				"relative_to_pictures": True
+			},
 			"command_mapping": {}
 		}
 

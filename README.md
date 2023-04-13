@@ -43,7 +43,14 @@ The config file is located in _%LocalAppData%\jangxx\SteamVR OSC Control_ and ve
         "listen_port": 9001 // port the OSC server listens on
     },
     "command_mapping": {
-        "/avatar/parameters/ParameterName": "<some command>", // mapping between the parameters and the debug commands
+        "/avatar/parameters/ParameterName": "<some command>", // mapping between the parameters and the commands
+    },
+    "screenshots": {
+        // location to place screenshots in. has to be absolute or relative to the users Pictures directory
+        "save_path": "SteamVR", 
+
+        // if the path is relative to the users Pictures directory, otherwise it is assumed 
+        "relative_to_pictures": true
     }
 }
 ```
@@ -53,6 +60,11 @@ Changes to the config file are not automatically applied, but the tray icon menu
 To find the valid command names, open the SteamVR Debug command window, which you can find as follows:
 
 ![SteamVR Debug Commands](/assets/gh_steamvr_debug.png)
+
+In addition to the built-in debug commands, the program also defines its own commands which use different API(s):
+
+- `openvr_screenshot`  
+Triggers a screenshot using `IVRScreenshots::RequestScreenshot` instead of the Compositors screenshot function. Will only take a screenshot if an app is running. Places the screenshot in the directory specified in the config file.
 
 ## Command mapping file
 

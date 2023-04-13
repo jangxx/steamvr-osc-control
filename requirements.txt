@@ -4,8 +4,10 @@ cx-Logging==3.1.0
 lief==0.12.3
 openvr==1.23.701
 Pillow==9.5.0
+pypiwin32==223
 pystray==0.19.4
 python-osc==1.8.1
 pywin32==306
 six==1.16.0
 websockets==11.0.1
+win10toast==0.9

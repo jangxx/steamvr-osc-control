@@ -20,6 +20,8 @@ import win32con
 
 from config import CONFIG_DIR, Config
 from websocket_interface import WebSocketInterface
+from openvr_commands import take_openvr_screenshot
+from utilities import relpath, IS_FROZEN
 
 APPLICATION_KEY = "com.jangxx.steamvr-osc-control"
 
@@ -37,15 +39,6 @@ if not args.use_stdout:
 	sys.stdout = log_file
 	sys.stderr = log_file
 
-# determine if we are frozen with cx_freeze or running normally
-if getattr(sys, 'frozen', False):
-	# The application is frozen
-	SCRIPT_DIR = os.path.dirname(sys.executable)
-	IS_FROZEN = True
-else:
-	# The application is not frozen
-	SCRIPT_DIR = os.path.join(os.path.dirname(__file__), "../")
-	IS_FROZEN = False
 
 # this has to happen after we setup the stdout and stderr redirection
 global_config = Config()
@@ -65,12 +58,11 @@ global_state = {
 }
 
 SPECIAL_COMMANDS = {
+	"openvr_screenshot": take_openvr_screenshot,
 }
 
 trayicon = None
 
-def relpath(p):
-	return os.path.normpath(os.path.join(SCRIPT_DIR, p))
 
 def show_error(message, title="Error"):
 	def _show():
@@ -231,7 +223,11 @@ async def osc_message_handler(command_mailboxes: dict[str, str], address: str, *
 		command = command_mapping[address]
 
 		if command in SPECIAL_COMMANDS:
-			await websocket_interface.send_request(**SPECIAL_COMMANDS[command])
+			try:
+				SPECIAL_COMMANDS[command](global_config, websocket_interface)
+			except Exception as e:
+				show_error(f"Failed to execute command {command}: {repr(e)}")
+				traceback.print_exc()
 		elif command in command_mailboxes:
 			await websocket_interface.send_request(command_mailboxes[command], message_type=command)
 
@@ -322,6 +318,7 @@ def main(icon):
 	try:
 		async_main_loop.run_until_complete(async_main())
 	except Exception as e:
+		async_main_loop.stop()
 		show_error(f"Encountered unexpected error: {e}", "Error")
 		traceback.print_exc()
 		encountered_error = True
