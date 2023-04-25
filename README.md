@@ -1,6 +1,6 @@
 # SteamVR OSC Integration
 
-**This project is provided *as-is* without any accompanying avatar setup or menu icons. If you're looking for an easy way to set this up (including a video tutorial), you can purchase the Support Package on booth here: TBA**
+**This project is provided *as-is* without any accompanying avatar setup or menu icons. If you're looking for an easy way to set this up (including a video tutorial), you can purchase the Support Package on booth here: https://jangxx.booth.pm/items/4698066**
 
 A small utility to control a few SteamVR functions via OSC in order to expose them to VRChat.
 It is essentially a bridge between OSC and the SteamVR debug commands (_SteamVR > Developer > Debug Commands_).
