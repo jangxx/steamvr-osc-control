@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 command_map.txt
+/*.zip
